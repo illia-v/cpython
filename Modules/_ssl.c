@@ -3153,9 +3153,6 @@ _ssl__SSLContext_impl(PyTypeObject *type, int proto_version)
     /* Make OpenSSL 3.0.0 behave like 1.1.1 */
     options |= SSL_OP_IGNORE_UNEXPECTED_EOF;
 #endif
-#ifdef SSL_OP_ENABLE_KTLS
-    options |= SSL_OP_ENABLE_KTLS;
-#endif
     SSL_CTX_set_options(self->ctx, options);
 
     /* A bare minimum cipher list without completely broken cipher suites.
@@ -5921,6 +5918,10 @@ sslmodule_init_constants(PyObject *m)
 #ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
     PyModule_AddIntConstant(m, "OP_IGNORE_UNEXPECTED_EOF",
                             SSL_OP_IGNORE_UNEXPECTED_EOF);
+#endif
+#ifdef SSL_OP_ENABLE_KTLS
+    PyModule_AddIntConstant(m, "OP_ENABLE_KTLS",
+                            SSL_OP_ENABLE_KTLS);
 #endif
 
 #ifdef X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT
