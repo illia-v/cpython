@@ -13,6 +13,7 @@ on:
     - '3.9'
     - '3.8'
     - '3.7'
+    - 'ktls'
   pull_request:
     branches:
     - 'main'
@@ -235,8 +236,13 @@ jobs:
       fail-fast: false
       matrix:
         openssl_ver: [1.1.1q, 3.0.5]
+        openssl_config_args: ['']
+        include:
+          - openssl_ver: 3.0.5
+            openssl_config_args: 'enable-ktls'
     env:
       OPENSSL_VER: ${{ matrix.openssl_ver }}
+      OPENSSL_CONFIG_ARGS: ${{ matrix.openssl_config_args }}
       MULTISSL_DIR: ${{ github.workspace }}/multissl
       OPENSSL_DIR: ${{ github.workspace }}/multissl/openssl/${{ matrix.openssl_ver }}
       LD_LIBRARY_PATH: ${{ github.workspace }}/multissl/openssl/${{ matrix.openssl_ver }}/lib
@@ -256,10 +262,10 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ./multissl/openssl/${{ env.OPENSSL_VER }}
-        key: ${{ runner.os }}-multissl-openssl-${{ env.OPENSSL_VER }}
+        key: ${{ runner.os }}-multissl-openssl-${{ env.OPENSSL_VER }}-${{ env.OPENSSL_CONFIG_ARGS }}
     - name: Install OpenSSL
       if: steps.cache-openssl.outputs.cache-hit != 'true'
-      run: python3 Tools/ssl/multissltests.py --steps=library --base-directory $MULTISSL_DIR --openssl $OPENSSL_VER --system Linux
+      run: python3 Tools/ssl/multissltests.py --steps=library --base-directory $MULTISSL_DIR --openssl $OPENSSL_VER --config-args $OPENSSL_CONFIG_ARGS --system Linux
     - name: Add ccache to PATH
       run: |
         echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV

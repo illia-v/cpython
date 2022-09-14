@@ -98,6 +98,12 @@ parser.add_argument(
     ).format(LIBRESSL_RECENT_VERSIONS, LIBRESSL_OLD_VERSIONS)
 )
 parser.add_argument(
+    '--config-args',
+    nargs='*',
+    default=(),
+    help="Configuration options for OpenSSL / LibreSSL.",
+)
+parser.add_argument(
     '--tests',
     nargs='*',
     default=(),
@@ -330,7 +336,7 @@ class AbstractBuilder(object):
             else:
                 log.debug("Already has src {}".format(self.src_file))
             self._unpack_src()
-            self._build_src()
+            self._build_src(tuple(self.args.config_args))
             self._make_install()
         else:
             log.info("Already has installation {}".format(self.install_dir))
