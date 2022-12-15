@@ -253,6 +253,8 @@ jobs:
       run: echo "::add-matcher::.github/problem-matchers/gcc.json"
     - name: Install Dependencies
       run: sudo ./.github/workflows/posix-deps-apt.sh
+    - name: Load kTLS module
+      run: sudo modprobe tls
     - name: Configure OpenSSL env vars
       run: |
         echo "MULTISSL_DIR=${GITHUB_WORKSPACE}/multissl" >> $GITHUB_ENV
