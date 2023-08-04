@@ -501,8 +501,8 @@ jobs:
     - name: Tests
       run: xvfb-run make buildbottest TESTOPTS="-j4 -uall,-cpu"
 
-  cluster_fuzz_line:
-    name: ClusterFuzzLite fuzzing
+  cluster_fuzz_lite:
+    name: ClusterFuzzLite
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: check_source
@@ -515,18 +515,19 @@ jobs:
           - undefined
           - memory
     steps:
+      - name: Download cpython3 project data from oss-fuzz
+        run: |
+          mkdir .clusterfuzzlite
+          curl -L https://github.com/google/oss-fuzz/archive/master.tar.gz | tar -xz --strip 3 -C .clusterfuzzlite oss-fuzz-master/projects/cpython3
       - name: Build Fuzzers (${{ matrix.sanitizer }})
-        id: build
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
-          language: c
           sanitizer: ${{ matrix.sanitizer }}
       - name: Run Fuzzers (${{ matrix.sanitizer }})
-        id: run
         uses: google/clusterfuzzlite/actions/run_fuzzers@v1
         with:
           fuzz-seconds: 300
-          mode: 'code-change'
+          mode: code-change
           parallel-fuzzing: true
           sanitizer: ${{ matrix.sanitizer }}
 
@@ -545,6 +546,7 @@ jobs:
     - build_ubuntu_ssltests
     - test_hypothesis
     - build_asan
+    - cluster_fuzz_lite
 
     runs-on: ubuntu-latest
 
