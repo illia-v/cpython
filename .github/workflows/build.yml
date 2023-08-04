@@ -23,6 +23,8 @@ jobs:
       run_hypothesis: ${{ steps.check.outputs.run_hypothesis }}
       config_hash: ${{ steps.config_hash.outputs.hash }}
     steps:
+      - name: Exit early
+        run: exit 1
       - uses: actions/checkout@v3
       - name: Check for source changes
         id: check
@@ -505,8 +507,8 @@ jobs:
     name: ClusterFuzzLite
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: check_source
-    if: needs.check_source.outputs.run_tests == 'true'
+#    needs: check_source
+#    if: needs.check_source.outputs.run_tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -520,10 +522,12 @@ jobs:
         run: |
           mkdir .clusterfuzzlite
           curl -L https://github.com/google/oss-fuzz/archive/master.tar.gz | tar -xz --strip 3 -C .clusterfuzzlite oss-fuzz-master/projects/cpython3
+          pwd
+          exit 1
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
-          project-src-path: /github/workspace/storage/cpython
+          project-src-path: .
           sanitizer: ${{ matrix.sanitizer }}
       - name: Run Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/run_fuzzers@v1
