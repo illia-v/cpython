@@ -522,12 +522,12 @@ jobs:
         run: |
           mkdir .clusterfuzzlite
           curl -L https://github.com/google/oss-fuzz/archive/master.tar.gz | tar -xz --strip 3 -C .clusterfuzzlite oss-fuzz-master/projects/cpython3
-          pwd
-          exit 1
+#          pwd
+#          exit 1
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
-          project-src-path: .
+          project-src-path: ${{ github.workspace }}
           sanitizer: ${{ matrix.sanitizer }}
       - name: Run Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/run_fuzzers@v1
