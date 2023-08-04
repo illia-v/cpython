@@ -515,6 +515,7 @@ jobs:
           - undefined
           - memory
     steps:
+      - uses: actions/checkout@v3
       - name: Download cpython3 project data from oss-fuzz
         run: |
           mkdir .clusterfuzzlite
@@ -522,6 +523,7 @@ jobs:
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/build_fuzzers@v1
         with:
+          project-src-path: /github/workspace/storage/cpython
           sanitizer: ${{ matrix.sanitizer }}
       - name: Run Fuzzers (${{ matrix.sanitizer }})
         uses: google/clusterfuzzlite/actions/run_fuzzers@v1
