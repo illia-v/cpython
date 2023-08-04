@@ -508,7 +508,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 #    needs: check_source
-    if: (github.ref == 'cluster-fuzz-lite-test' || github.base_ref == 'main')  # && needs.check_source.outputs.run_tests == 'true'
+#    if: (github.ref == 'cluster-fuzz-lite-test' || github.base_ref == 'main')  # && needs.check_source.outputs.run_tests == 'true'
     permissions:
       security-events: write
     strategy:
@@ -516,6 +516,7 @@ jobs:
       matrix:
         sanitizer: [address, undefined, memory]
     steps:
+      - run: echo ${{ github.ref }}; echo ${{ github.base_ref }}
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         id: build
         uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
