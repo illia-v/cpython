@@ -508,7 +508,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 #    needs: check_source
-    if: (github.ref == 'main' || github.base_ref == 'main') && needs.check_source.outputs.run_tests == 'true'
+    if: (github.ref == 'cluster-fuzz-lite-test' || github.base_ref == 'main') && needs.check_source.outputs.run_tests == 'true'
     permissions:
       security-events: write
     steps:
