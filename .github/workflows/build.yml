@@ -527,12 +527,12 @@ jobs:
           pwd
 #          exit 1
       - name: Build Fuzzers (${{ matrix.sanitizer }})
-        uses: google/clusterfuzzlite/actions/build_fuzzers@master
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
         with:
           project-src-path: cpython
           sanitizer: ${{ matrix.sanitizer }}
       - name: Run Fuzzers (${{ matrix.sanitizer }})
-        uses: google/clusterfuzzlite/actions/run_fuzzers@master
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
         with:
           fuzz-seconds: 300
           mode: code-change
