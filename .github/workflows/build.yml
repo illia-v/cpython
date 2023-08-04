@@ -517,19 +517,19 @@ jobs:
           - undefined
           - memory
     steps:
-      - uses: actions/checkout@v3
-        with:
-          path: cpython
+#      - uses: actions/checkout@v3
+#        with:
+#          path: cpython
       - name: Download cpython3 project data from oss-fuzz
         run: |
-          mkdir .clusterfuzzlite
-          curl -L https://github.com/google/oss-fuzz/archive/master.tar.gz | tar -xz --strip 3 -C .clusterfuzzlite oss-fuzz-master/projects/cpython3
+          mkdir -p storage/cpython/.clusterfuzzlite
+          curl -L https://github.com/google/oss-fuzz/archive/master.tar.gz | tar -xz --strip 3 -C storage/cpython/.clusterfuzzlite oss-fuzz-master/projects/cpython3
           pwd
 #          exit 1
       - name: Build Fuzzers (${{ matrix.sanitizer }})
         uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
         with:
-          project-src-path: cpython
+          project-src-path: storage/cpython/.clusterfuzzlite
           sanitizer: ${{ matrix.sanitizer }}
       - name: Run Fuzzers (${{ matrix.sanitizer }})
         uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
