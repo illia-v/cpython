@@ -478,7 +478,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: check_source
-    if: needs.check_source.outputs.run_cifuzz == 'true'
     permissions:
       security-events: write
     strategy:
