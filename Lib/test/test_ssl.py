@@ -22,6 +22,7 @@ import time
 import enum
 import gc
 import http.client
+import io
 import os
 import errno
 import pprint
@@ -1386,6 +1387,79 @@ class ContextTests(unittest.TestCase):
             ctx.load_cert_chain(CERTFILE_PROTECTED, password=getpass_exception)
         # Make sure the password function isn't called if it isn't needed
         ctx.load_cert_chain(CERTFILE, password=getpass_exception)
+
+    def test_load_cert_chain_file_objects(self):
+        def read(path, mode="rb"):
+            with open(path, mode) as file:
+                return file.read()
+
+        cert = read(ONLYCERT)
+        key = read(ONLYKEY)
+        combined = read(CERTFILE)
+
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(io.BytesIO(combined))
+        ctx.load_cert_chain(io.BytesIO(cert), io.BytesIO(key))
+        ctx.load_cert_chain(io.StringIO(cert.decode("ascii")),
+                            io.StringIO(key.decode("ascii")))
+        # Additional certificates are exposed to the peer as a chain.
+        signed = read(SIGNED_CERTFILE)
+        signing_ca = read(SIGNING_CA)
+        ctx.load_cert_chain(io.BytesIO(signed + signing_ca))
+
+        client_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        client_ctx.check_hostname = False
+        client_ctx.verify_mode = ssl.CERT_NONE
+        client_in, client_out = ssl.MemoryBIO(), ssl.MemoryBIO()
+        server_in, server_out = ssl.MemoryBIO(), ssl.MemoryBIO()
+        client = client_ctx.wrap_bio(client_in, client_out)
+        server = ctx.wrap_bio(server_in, server_out, server_side=True)
+
+        for _ in range(5):
+            with contextlib.suppress(ssl.SSLWantReadError):
+                client.do_handshake()
+            if client_out.pending:
+                server_in.write(client_out.read())
+            with contextlib.suppress(ssl.SSLWantReadError):
+                server.do_handshake()
+            if server_out.pending:
+                client_in.write(server_out.read())
+        client.do_handshake()
+        server.do_handshake()
+
+        expected_chain = [
+            ssl.PEM_cert_to_DER_cert(read(SINGED_CERTFILE_ONLY, "r")),
+            ssl.PEM_cert_to_DER_cert(signing_ca.decode("ascii")),
+        ]
+        self.assertEqual(client.get_unverified_chain(), expected_chain)
+
+        protected = read(CERTFILE_PROTECTED)
+        ctx.load_cert_chain(io.BytesIO(protected), password=KEY_PASSWORD)
+        ctx.load_cert_chain(io.BytesIO(protected),
+                            password=lambda: KEY_PASSWORD)
+        with self.assertRaises(ssl.SSLError):
+            ctx.load_cert_chain(io.BytesIO(protected), password="badpass")
+
+        with self.assertRaisesRegex(TypeError, "both filesystem paths"):
+            ctx.load_cert_chain(io.BytesIO(cert), ONLYKEY)
+
+        class BadReader:
+            def read(self):
+                return bytearray()
+
+        with self.assertRaisesRegex(TypeError, r"certfile\.read\(\)"):
+            ctx.load_cert_chain(BadReader())
+
+    def test_load_cert_chain_file_objects_client_auth(self):
+        client_ctx, server_ctx, hostname = testing_context()
+        server_ctx.load_verify_locations(ONLYCERT)
+        server_ctx.verify_mode = ssl.CERT_REQUIRED
+
+        with open(ONLYCERT, "rb") as certfile, open(ONLYKEY, "rb") as keyfile:
+            client_ctx.load_cert_chain(
+                io.BytesIO(certfile.read()), io.BytesIO(keyfile.read()))
+
+        server_params_test(client_ctx, server_ctx, sni_name=hostname)
 
     @threading_helper.requires_working_threading()
     def test_load_cert_chain_thread_safety(self):

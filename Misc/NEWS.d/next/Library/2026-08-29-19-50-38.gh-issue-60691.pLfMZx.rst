@@ -1,0 +1,2 @@
+:meth:`ssl.SSLContext.load_cert_chain` now accepts readable file objects,
+allowing certificate chains and private keys to be loaded from memory.

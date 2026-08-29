@@ -4613,6 +4613,137 @@ error:
     return ret;
 }
 
+static PyObject *
+load_cert_chain_from_memory_lock_held(PySSLContext *self,
+                                      _PySSLPasswordInfo *pw_info,
+                                      PyObject *certdata, PyObject *keydata)
+{
+    BIO *certbio = NULL, *keybio = NULL;
+    X509 *cert = NULL, *cacert = NULL;
+    EVP_PKEY *private_key = NULL;
+    PyObject *ret = NULL;
+    unsigned long err;
+    int r = 0;
+
+    if (PyBytes_GET_SIZE(certdata) > INT_MAX ||
+            PyBytes_GET_SIZE(keydata) > INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "certificate data is too long");
+        return NULL;
+    }
+
+    certbio = BIO_new_mem_buf(PyBytes_AS_STRING(certdata),
+                              (int)PyBytes_GET_SIZE(certdata));
+    keybio = BIO_new_mem_buf(PyBytes_AS_STRING(keydata),
+                             (int)PyBytes_GET_SIZE(keydata));
+    if (certbio == NULL || keybio == NULL) {
+        _setSSLError(get_state_ctx(self), "Can't allocate buffer", 0,
+                     __FILE__, __LINE__);
+        goto error;
+    }
+
+    PySSL_BEGIN_ALLOW_THREADS_S(pw_info->thread_state);
+    cert = PEM_read_bio_X509_AUX(certbio, NULL,
+                                 _password_callback, pw_info);
+    if (cert == NULL) {
+        goto end_allow_threads;
+    }
+    r = SSL_CTX_use_certificate(self->ctx, cert);
+    if (r != 1) {
+        goto end_allow_threads;
+    }
+    r = SSL_CTX_clear_chain_certs(self->ctx);
+    if (r != 1) {
+        goto end_allow_threads;
+    }
+
+    while ((cacert = PEM_read_bio_X509(certbio, NULL,
+                                       _password_callback, pw_info)) != NULL) {
+        if (!SSL_CTX_add0_chain_cert(self->ctx, cacert)) {
+            X509_free(cacert);
+            cacert = NULL;
+            r = 0;
+            goto end_allow_threads;
+        }
+        /* SSL_CTX_add0_chain_cert() takes ownership. */
+        cacert = NULL;
+    }
+    err = ERR_peek_last_error();
+    if (ERR_GET_LIB(err) != ERR_LIB_PEM ||
+            ERR_GET_REASON(err) != PEM_R_NO_START_LINE) {
+        r = 0;
+        goto end_allow_threads;
+    }
+    /* PEM_R_NO_START_LINE marks the end of the certificate chain. */
+    ERR_clear_error();
+
+    private_key = PEM_read_bio_PrivateKey(keybio, NULL,
+                                          _password_callback, pw_info);
+    if (private_key == NULL) {
+        r = 0;
+        goto end_allow_threads;
+    }
+    r = SSL_CTX_use_PrivateKey(self->ctx, private_key);
+    if (r != 1) {
+        goto end_allow_threads;
+    }
+    r = SSL_CTX_check_private_key(self->ctx);
+
+end_allow_threads:
+    PySSL_END_ALLOW_THREADS_S(pw_info->thread_state);
+
+    if (r != 1) {
+        if (pw_info->error) {
+            ERR_clear_error();
+            /* the password callback has already set the error information */
+        }
+        else {
+            _setSSLError(get_state_ctx(self), NULL, 0, __FILE__, __LINE__);
+        }
+        goto error;
+    }
+    ret = Py_None;
+
+error:
+    EVP_PKEY_free(private_key);
+    X509_free(cert);
+    BIO_free(keybio);
+    BIO_free(certbio);
+    return ret;
+}
+
+static PyObject *
+read_cert_chain_file(PyObject *file, const char *name)
+{
+    PyObject *read = PyObject_GetAttrString(file, "read");
+    if (read == NULL) {
+        if (!PyErr_ExceptionMatches(PyExc_AttributeError)) {
+            return NULL;
+        }
+        PyErr_Clear();
+        PyErr_Format(PyExc_TypeError,
+                     "%s should be a valid filesystem path or "
+                     "a readable file object", name);
+        return NULL;
+    }
+    PyObject *data = PyObject_CallNoArgs(read);
+    Py_DECREF(read);
+    if (data == NULL) {
+        return NULL;
+    }
+    if (PyUnicode_Check(data)) {
+        Py_SETREF(data, PyUnicode_AsASCIIString(data));
+        return data;
+    }
+    if (!PyBytes_Check(data)) {
+        PyErr_Format(PyExc_TypeError,
+                     "%s.read() should return a string or bytes", name);
+        Py_DECREF(data);
+        return NULL;
+    }
+    return data;
+}
+
 /*[clinic input]
 _ssl._SSLContext.load_cert_chain
     certfile: object
@@ -4627,26 +4758,54 @@ _ssl__SSLContext_load_cert_chain_impl(PySSLContext *self, PyObject *certfile,
 /*[clinic end generated code: output=9480bc1c380e2095 input=30bc7e967ea01a58]*/
 {
     PyObject *certfile_bytes = NULL, *keyfile_bytes = NULL;
+    PyObject *certdata = NULL, *keydata = NULL;
     _PySSLPasswordInfo pw_info = { NULL, NULL, NULL, 0, 0 };
     PyObject *ret = NULL;
+    int certfile_is_path = 1;
 
     errno = 0;
     ERR_clear_error();
     if (keyfile == Py_None)
         keyfile = NULL;
     if (!PyUnicode_FSConverter(certfile, &certfile_bytes)) {
-        if (PyErr_ExceptionMatches(PyExc_TypeError)) {
-            PyErr_SetString(PyExc_TypeError,
-                            "certfile should be a valid filesystem path");
+        if (!PyErr_ExceptionMatches(PyExc_TypeError)) {
+            return NULL;
         }
-        return NULL;
+        PyErr_Clear();
+        certfile_is_path = 0;
+        certdata = read_cert_chain_file(certfile, "certfile");
+        if (certdata == NULL) {
+            goto done;
+        }
     }
-    if (keyfile && !PyUnicode_FSConverter(keyfile, &keyfile_bytes)) {
-        if (PyErr_ExceptionMatches(PyExc_TypeError)) {
-            PyErr_SetString(PyExc_TypeError,
-                            "keyfile should be a valid filesystem path");
+
+    if (certfile_is_path) {
+        if (keyfile && !PyUnicode_FSConverter(keyfile, &keyfile_bytes)) {
+            if (PyErr_ExceptionMatches(PyExc_TypeError)) {
+                PyErr_SetString(PyExc_TypeError,
+                                "keyfile should be a valid filesystem path");
+            }
+            goto done;
         }
-        goto done;
+    }
+    else if (keyfile == NULL) {
+        keydata = Py_NewRef(certdata);
+    }
+    else {
+        if (PyUnicode_FSConverter(keyfile, &keyfile_bytes)) {
+            PyErr_SetString(PyExc_TypeError,
+                            "certfile and keyfile should be both filesystem "
+                            "paths or both readable file objects");
+            goto done;
+        }
+        if (!PyErr_ExceptionMatches(PyExc_TypeError)) {
+            goto done;
+        }
+        PyErr_Clear();
+        keydata = read_cert_chain_file(keyfile, "keyfile");
+        if (keydata == NULL) {
+            goto done;
+        }
     }
     if (password != Py_None) {
         if (PyCallable_Check(password)) {
@@ -4658,11 +4817,20 @@ _ssl__SSLContext_load_cert_chain_impl(PySSLContext *self, PyObject *certfile,
     }
 
     PyMutex_Lock(&self->tstate_mutex);
-    ret = load_cert_chain_lock_held(self, &pw_info, certfile_bytes, keyfile_bytes);
+    if (certfile_is_path) {
+        ret = load_cert_chain_lock_held(self, &pw_info, certfile_bytes,
+                                        keyfile_bytes);
+    }
+    else {
+        ret = load_cert_chain_from_memory_lock_held(self, &pw_info, certdata,
+                                                    keydata);
+    }
     PyMutex_Unlock(&self->tstate_mutex);
 
 done:
     PyMem_Free(pw_info.password);
+    Py_XDECREF(keydata);
+    Py_XDECREF(certdata);
     Py_XDECREF(keyfile_bytes);
     Py_XDECREF(certfile_bytes);
     return ret;

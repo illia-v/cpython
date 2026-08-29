@@ -1566,14 +1566,18 @@ to speed up repeated connections from the same clients.
 
 .. method:: SSLContext.load_cert_chain(certfile, keyfile=None, password=None)
 
-   Load a private key and the corresponding certificate.  The *certfile*
-   string must be the path to a single file in PEM format containing the
-   certificate as well as any number of CA certificates needed to establish
-   the certificate's authenticity.  The *keyfile* string, if present, must
-   point to a file containing the private key.  Otherwise the private
-   key will be taken from *certfile* as well.  See the discussion of
-   :ref:`ssl-certificates` for more information on how the certificate
-   is stored in the *certfile*.
+   Load a private key and the corresponding certificate.  The *certfile* must
+   be a path or a readable file object containing a PEM-formatted certificate
+   and any number of CA certificates needed to establish the certificate's
+   authenticity.  The *keyfile*, if present, must be the same kind of argument
+   as *certfile* and contain the private key.  Otherwise the private key will
+   be taken from *certfile* as well.  See the discussion of
+   :ref:`ssl-certificates` for more information on how the certificate is
+   stored in *certfile*.
+
+   A readable file object is consumed from its current position by calling its
+   :meth:`~io.IOBase.read` method once, without arguments.  The complete result
+   is buffered in memory and must be :class:`bytes` or an ASCII :class:`str`.
 
    The *password* argument may be a function to call to get the password for
    decrypting the private key.  It will only be called if the private key is
@@ -1593,6 +1597,9 @@ to speed up repeated connections from the same clients.
 
    .. versionchanged:: 3.3
       New optional argument *password*.
+
+   .. versionchanged:: 3.16
+      *certfile* and *keyfile* may be readable file objects.
 
 .. method:: SSLContext.load_default_certs(purpose=Purpose.SERVER_AUTH)
 
